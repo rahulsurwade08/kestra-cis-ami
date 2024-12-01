@@ -83,7 +83,7 @@ tasks:
 triggers:
   - id: webhook
     type: io.kestra.plugin.core.trigger.Webhook
-    key: 4wjtkzwVGBM9yKnjm3yv8r
+    key: webhook-key
     conditions:
       - type: io.kestra.plugin.core.condition.ExpressionCondition
         expression: "{{ trigger.body.body == 'PULL_REQUEST_MERGED' }}"
