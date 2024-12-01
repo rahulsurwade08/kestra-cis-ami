@@ -65,7 +65,7 @@ module "ec2_instance" {
   user_data                   = <<-EOF
                                 #!/bin/bash
                                 curl -o /tmp/cis-hardening.sh https://raw.githubusercontent.com/AndyHS-506/Ubuntu-Hardening/refs/heads/main/hardening-24-04.sh && \
-                                bash /tmp/cis-hardening.sh
+                                bash /tmp/cis-hardening.sh | tee /tmp/cis-hardening_output.log 2>&1
                                 EOF
   subnet_id                   = module.vpc.private_subnets[0]
   vpc_security_group_ids = [
