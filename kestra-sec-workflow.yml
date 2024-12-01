@@ -1,0 +1,89 @@
+id: kestra-cis-ami
+namespace: hackfrost
+
+inputs:
+  - id: key
+    type: STRING
+    displayName: "AWS_ACCESS_KEY_ID"
+
+  - id: secret
+    type: STRING
+    displayName: "AWS_SECRET_ACCESS_KEY"
+
+  - id: session
+    type: STRING
+    displayName: "AWS_SESSION_TOKEN"
+
+  - id: infracost
+    type: STRING
+    displayName: "INFRACOST_API_KEY"
+
+tasks:
+  - id: git
+    type: io.kestra.plugin.core.flow.WorkingDirectory
+    tasks:
+      - id: clone_repository
+        type: io.kestra.plugin.git.Clone
+        url: https://github.com/rahulsurwade08/kestra-cis-ami.git
+        branch: main
+
+      - id: run_tfsec
+        type: io.kestra.plugin.scripts.shell.Script
+        allowFailure: true
+        taskRunner:
+          type: io.kestra.plugin.scripts.runner.docker.Docker
+        containerImage: aquasec/tfsec:latest
+        script: |
+          tfsec manifests/. --out tfsec_report.txt
+        description: "Run tfsec to check for security vulnerabilities"
+        outputFiles:
+          - tfsec_report.txt
+
+      - id: run_tflint
+        type: io.kestra.plugin.scripts.shell.Script
+        allowFailure: true
+        taskRunner:
+          type: io.kestra.plugin.scripts.runner.docker.Docker
+        containerImage: ghcr.io/terraform-linters/tflint
+        script: |
+          tflint --chdir=manifests > tflint_report.txt
+        description: "Run tflint to lint the Terraform code"
+        outputFiles:
+          - tflint_report.txt
+          
+      - id: run_infracost
+        type: io.kestra.plugin.scripts.shell.Script
+        allowFailure: true
+        taskRunner:
+          type: io.kestra.plugin.scripts.runner.docker.Docker
+        containerImage: infracost/infracost:ci-latest
+        script: |
+          infracost breakdown --path ./manifests --format json --out-file infracost_output.json
+        description: "Run infracost to estimate Terraform resource costs"
+        outputFiles:
+          - infracost_output.json
+        env:
+          INFRACOST_API_KEY: "{{ inputs.infracost }}"
+
+      - id: terraform
+        type: io.kestra.plugin.terraform.cli.TerraformCLI
+        beforeCommands:
+          - cd manifests && terraform init
+        outputFiles:
+          - "*.txt"
+        commands:
+          - terraform plan 2>&1 | tee plan_output.txt
+#          - terraform apply -auto-approve 2>&1 | tee apply_output.txt
+        env:
+          AWS_ACCESS_KEY_ID: "{{ inputs.key }}"
+          AWS_SECRET_ACCESS_KEY: "{{ inputs.secret }}"
+          AWS_SESSION_TOKEN: "{{ inputs.session }}" 
+
+
+triggers:
+  - id: webhook
+    type: io.kestra.plugin.core.trigger.Webhook
+    key: 4wjtkzwVGBM9yKnjm3yv8r
+    conditions:
+      - type: io.kestra.plugin.core.condition.ExpressionCondition
+        expression: "{{ trigger.body.body == 'PULL_REQUEST_MERGED' }}"
